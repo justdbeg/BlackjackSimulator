@@ -2,43 +2,21 @@
 
 import random
 from betting_strategy import calculate_bet
-from basic_strategy import basic_strategy  # Import the strategy matrix
+from basic_strategy import basic_strategy
 
 class BlackjackSimulation:
-    def __init__(self, decks=6, base_bet=10):
-        self.decks = decks
-        self.base_bet = base_bet
-        self.shoe = self.initialize_shoe()
+    def __init__(self, casino_rules):
+        # Store the casino rules object to access the rules as needed
+        self.casino_rules = casino_rules
+        self.shoe = self.casino_rules.initialize_shoe()
         self.running_count = 0
         self.true_count = 0
 
-    def initialize_shoe(self):
-        single_deck = [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11] * 4
-        shoe = single_deck * self.decks
-        random.shuffle(shoe)
-        return shoe
-
     def deal_card(self):
-        if len(self.shoe) == 0:
-            self.shoe = self.initialize_shoe()
-            self.running_count = 0
-
-        card = self.shoe.pop()
-        self.update_count(card)
-        print(f"Dealt card: {card}, Updated Running Count: {self.running_count}")
+        # Use the CasinoRules class's deal_card method to manage reshuffle and count
+        card = self.casino_rules.deal_card()
+        print(f"Dealt card: {card}, Updated Running Count: {self.casino_rules.running_count}")
         return card
-
-    def update_count(self, card):
-        if card in [2, 3, 4, 5, 6]:  # Low cards (2-6) increase the count
-            self.running_count += 1
-        elif card in [10, 11]:       # High cards (10, J, Q, K, A) decrease the count
-            self.running_count -= 1
-
-    def calculate_true_count(self):
-        decks_remaining = len(self.shoe) / 52
-        if decks_remaining > 0:
-            self.true_count = self.running_count / decks_remaining
-        return self.true_count
 
     def calculate_hand_value(self, hand):
         """Calculates the total value of a hand, treating Ace as 1 or 11."""
@@ -58,70 +36,115 @@ class BlackjackSimulation:
     def get_action(self, player_hand, dealer_card):
         """Determines the player's optimal action based on basic strategy."""
         player_value = self.calculate_hand_value(player_hand)
+        is_soft = 11 in player_hand and player_value <= 21  # Aces counted as 11 are treated as soft totals
 
         # Check if hand is a pair (both cards are the same)
         if len(player_hand) == 2 and player_hand[0] == player_hand[1]:
             action = basic_strategy['pairs'].get(player_hand[0], {}).get(dealer_card, 'stand')
         # Check if hand is a soft total (contains an Ace counted as 11)
-        elif 11 in player_hand:
+        elif is_soft:
             action = basic_strategy['soft_totals'].get(player_value, {}).get(dealer_card, 'hit')
-        # Hard totals
+        # For hard totals, reference the strategy matrix directly
         else:
             action = basic_strategy['hard_totals'].get(player_value, {}).get(dealer_card, 'hit')
 
+        print(f"Player hand: {player_hand} (Value: {player_value}, {'Soft' if is_soft else 'Hard'}), Dealer card: {dealer_card}, Action: {action}")
+
         return action
 
-    # In simulation.py
-
-    def simulate_hand(self):
+    def simulate_hand(self, target_total=None):
+        print(f"--- Simulating Hand ---")
         print(f"Starting running count for this hand: {self.running_count}")
 
-        # Player's initial hand and dealer's up card
-        player_hand = [self.deal_card(), self.deal_card()]
-        dealer_card = self.deal_card()
-        
-        print(f"Player starting hand: {player_hand}")
-        print(f"Dealer showing: {dealer_card}")
+        # Initial Dealing Sequence (Player -> Dealer -> Player -> Dealer)
+        player_hand = [self.deal_card()]
+        dealer_hand = [self.deal_card()]  # Dealer's first card (face-up)
 
-        # Player's turn using basic strategy
+        player_hand.append(self.deal_card())
+        dealer_hand.append(self.deal_card())  # Dealer's second card (face-down)
+
+        # Calculate initial totals
+        player_total = self.calculate_hand_value(player_hand)
+        dealer_total = self.calculate_hand_value(dealer_hand)
+
+        print(f"Player starting hand: {player_hand} (Total: {player_total})")
+        print(f"Dealer showing: {dealer_hand[0]}")  # Only show dealer's face-up card
+
+        # Check for natural blackjack (Player and Dealer)
+        if player_total == 21 or dealer_total == 21:
+            if player_total == 21 and dealer_total == 21:
+                print("Both player and dealer have blackjack. Push - Tie game.")
+                return "Push - Tie game."
+            elif player_total == 21:
+                print("Player has a natural blackjack! Player wins with a 3:2 payout.")
+                return "Player wins with blackjack!"
+            elif dealer_total == 21:
+                print("Dealer has a natural blackjack! Dealer wins.")
+                return "Dealer wins with blackjack!"
+
+        # Peek if dealer's face-up card is an Ace or a 10-value card
+        if dealer_hand[0] == 11 or dealer_hand[0] == 10:
+            print("Dealer peeks for blackjack...")
+            if dealer_total == 21:
+                print("Dealer has a blackjack!")
+                if player_total == 21:
+                    print("Player also has blackjack. Push - Tie game.")
+                    return "Push - Tie game."
+                else:
+                    print("Player does not have blackjack. Dealer wins.")
+                    return "Dealer wins with blackjack!"
+
+        # Flag to track if it's the first action for this hand
+        first_action = True
+
+        # Player's Turn
         while True:
-            action = self.get_action(player_hand, dealer_card)
-            print(f"Player chooses to {action}.")
+            action = self.get_action(player_hand, dealer_hand[0])
+            print(f"Player chooses to {action} with hand {player_hand} (total: {self.calculate_hand_value(player_hand)}) against dealer's {dealer_hand[0]}")
 
+            # Enforce double restrictions based on first action
+            if action == 'double' and not first_action:
+                print("Double is not allowed after the first action, switching to 'hit'.")
+                action = 'hit'  # Switch to hit if double isn't allowed
             if action == 'hit':
                 player_hand.append(self.deal_card())
                 if self.calculate_hand_value(player_hand) > 21:
                     print("Player busts!")
-                    return "Busts"  # Return bust outcome
+                    return "Busts"
             elif action == 'stand':
                 print("Player stands.")
                 break
-            elif action == 'double':
+            elif action == 'double' and first_action:
                 print("Player doubles down.")
                 player_hand.append(self.deal_card())
                 break
             elif action == 'split':
                 print("Player splits.")
-                # Implement split logic if desired
+                # Note: Implement split logic if desired, otherwise log this and skip for now
+                print("Split functionality not yet implemented in this test.")
+                return "Split skipped"
 
-        # Dealer's turn (standard rules)
-        dealer_hand = [dealer_card, self.deal_card()]
+            # Mark that the first action has been taken
+            first_action = False
+
+        # Dealer's Turn (Standard rules: must hit if < 17, must stand if > 17, can hit on soft 17 based on rules)
         print(f"Dealer's full hand: {dealer_hand}")
 
-        while self.calculate_hand_value(dealer_hand) < 17:
+        while self.calculate_hand_value(dealer_hand) < 17 or (
+                self.rules.dealer_hits_soft_17 and self.calculate_hand_value(dealer_hand) == 17 and 11 in dealer_hand):
             dealer_hand.append(self.deal_card())
             print(f"Dealer hits: {dealer_hand}")
             if self.calculate_hand_value(dealer_hand) > 21:
                 print("Dealer busts! Player wins!")
                 return "Player wins!"
 
-        # Determine the outcome
+        # Determine the outcome if neither busts
         player_value = self.calculate_hand_value(player_hand)
         dealer_value = self.calculate_hand_value(dealer_hand)
 
         print(f"Final Player hand: {player_hand} (Value: {player_value})")
         print(f"Final Dealer hand: {dealer_hand} (Value: {dealer_value})")
-        
+
         if player_value > dealer_value:
             print("Player wins!")
             return "Player wins!"
@@ -131,4 +154,3 @@ class BlackjackSimulation:
         else:
             print("Push - Tie game.")
             return "Push - Tie game."
-
