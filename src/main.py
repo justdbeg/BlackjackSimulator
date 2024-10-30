@@ -1,7 +1,7 @@
 # main.py
 
-from casino_rules import CasinoRules  # Make sure this import statement exists
-from simulation import BlackjackSimulation
+from src.casino_rules import CasinoRules  # Make sure this import statement exists
+from src.simulation import BlackjackSimulation
 
 def main():
     # Define specific casino rules (modify as needed for different scenarios)
