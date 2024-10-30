@@ -82,8 +82,8 @@ class BlackjackSimulation:
                 print("Dealer has a natural blackjack! Dealer wins.")
                 return "Dealer wins with blackjack!"
 
-        # Peek if dealer's face-up card is an Ace or a 10-value card
-        if dealer_hand[0] == 11 or dealer_hand[0] == 10:
+       # Peek if dealer's face-up card is an Ace or a ten-value card (typically only if Ace)
+        if dealer_hand[0] == 11:
             print("Dealer peeks for blackjack...")
             if dealer_total == 21:
                 print("Dealer has a blackjack!")
@@ -93,64 +93,99 @@ class BlackjackSimulation:
                 else:
                     print("Player does not have blackjack. Dealer wins.")
                     return "Dealer wins with blackjack!"
+            else:
+                print("Dealer does not have a blackjack. Continuing with player turn.")
 
-        # Flag to track if it's the first action for this hand
-        first_action = True
+        # Initialize player hands for handling splits
+        player_hands = [player_hand]
+        current_hand = 0
+        max_splits = self.casino_rules.max_splits  # Use casino rules to determine max splits allowed
 
-        # Player's Turn
-        while True:
-            action = self.get_action(player_hand, dealer_hand[0])
-            print(f"Player chooses to {action} with hand {player_hand} (total: {self.calculate_hand_value(player_hand)}) against dealer's {dealer_hand[0]}")
+        # Iterate over all player hands (to handle splitting)
+        while current_hand < len(player_hands):
+            player_hand = player_hands[current_hand]
+            first_action = True
+            print(f"\n--- Playing Hand {current_hand + 1} ---")
+            print(f"Player's current hand: {player_hand}")
 
-            # Enforce double restrictions based on first action
-            if action == 'double' and not first_action:
-                print("Double is not allowed after the first action, switching to 'hit'.")
-                action = 'hit'  # Switch to hit if double isn't allowed
-            if action == 'hit':
-                player_hand.append(self.deal_card())
-                if self.calculate_hand_value(player_hand) > 21:
-                    print("Player busts!")
-                    return "Busts"
-            elif action == 'stand':
-                print("Player stands.")
-                break
-            elif action == 'double' and first_action:
-                print("Player doubles down.")
-                player_hand.append(self.deal_card())
-                break
-            elif action == 'split':
-                print("Player splits.")
-                # Note: Implement split logic if desired, otherwise log this and skip for now
-                print("Split functionality not yet implemented in this test.")
-                return "Split skipped"
+            # Player's Turn for current hand
+            while True:
+                action = self.get_action(player_hand, dealer_hand[0])
+                print(f"Player chooses to {action} with hand {player_hand} (total: {self.calculate_hand_value(player_hand)}) against dealer's {dealer_hand[0]}")
 
-            # Mark that the first action has been taken
-            first_action = False
+                # Enforce double restrictions based on first action
+                if action == 'double' and not first_action:
+                    print("Double is not allowed after the first action, switching to 'hit'.")
+                    action = 'hit'  # Switch to hit if double isn't allowed
+                if action == 'hit':
+                    player_hand.append(self.deal_card())
+                    if self.calculate_hand_value(player_hand) > 21:
+                        print("Player busts!")
+                        break
+                elif action == 'stand':
+                    print("Player stands.")
+                    break
+                elif action == 'double' and first_action:
+                    print("Player doubles down.")
+                    player_hand.append(self.deal_card())
+                    break  # Ensures no further actions can be taken after doubling
+                elif action == 'split':
+                    # Check if splitting is allowed (cards must be the same, max splits not exceeded)
+                    if len(player_hand) == 2 and player_hand[0] == player_hand[1] and len(player_hands) < max_splits:
+                        print("Player splits.")
 
-        # Dealer's Turn (Standard rules: must hit if < 17, must stand if > 17, can hit on soft 17 based on rules)
-        print(f"Dealer's full hand: {dealer_hand}")
+                        # Create two new hands by splitting the pair
+                        new_hand_1 = [player_hand[0], self.deal_card()]
+                        new_hand_2 = [player_hand[1], self.deal_card()]
 
-        while self.calculate_hand_value(dealer_hand) < 17 or (
-                self.rules.dealer_hits_soft_17 and self.calculate_hand_value(dealer_hand) == 17 and 11 in dealer_hand):
-            dealer_hand.append(self.deal_card())
-            print(f"Dealer hits: {dealer_hand}")
-            if self.calculate_hand_value(dealer_hand) > 21:
-                print("Dealer busts! Player wins!")
-                return "Player wins!"
+                        # If the player splits Aces, only one card is allowed per new hand
+                        if player_hand[0] == 11:
+                            print("Split Aces: each hand receives one additional card.")
+                            player_hands[current_hand] = new_hand_1
+                            player_hands.append(new_hand_2)
+                            current_hand += 1  # Move to the next hand
+                            continue
 
-        # Determine the outcome if neither busts
-        player_value = self.calculate_hand_value(player_hand)
-        dealer_value = self.calculate_hand_value(dealer_hand)
+                        # For non-Ace splits, replace the current hand and add the second new hand to player_hands
+                        player_hands[current_hand] = new_hand_1
+                        player_hands.append(new_hand_2)
+                        print(f"New hands after split: {new_hand_1} and {new_hand_2}")
 
-        print(f"Final Player hand: {player_hand} (Value: {player_value})")
-        print(f"Final Dealer hand: {dealer_hand} (Value: {dealer_value})")
+                        # Mark that the first action has been taken
+                        first_action = False
+                        continue
+                    
+                        # Move to the next hand
+                    current_hand += 1
 
-        if player_value > dealer_value:
-            print("Player wins!")
-            return "Player wins!"
-        elif player_value < dealer_value:
-            print("Dealer wins!")
-            return "Dealer wins!"
-        else:
-            print("Push - Tie game.")
-            return "Push - Tie game."
+                    # Dealer's Turn (Standard rules: must hit if < 17, must stand if >= 17, can hit on soft 17 based on rules)
+                    print(f"\nDealer's full hand: {dealer_hand}")
+                    
+                    while self.calculate_hand_value(dealer_hand) < 17 or (
+                            self.casino_rules.dealer_hits_soft_17 and self.calculate_hand_value(dealer_hand) == 17 and 11 in dealer_hand):
+                        dealer_hand.append(self.deal_card())
+                        print(f"Dealer hits: {dealer_hand}")
+                        if self.calculate_hand_value(dealer_hand) > 21:
+                            print("Dealer busts! Player wins!")
+                            return "Player wins!"
+
+                    # Determine the outcome for each player hand if neither busts
+                    dealer_value = self.calculate_hand_value(dealer_hand)
+                    results = []
+
+                    for index, hand in enumerate(player_hands):
+                        player_value = self.calculate_hand_value(hand)
+                        print(f"\nFinal Player hand {index + 1}: {hand} (Value: {player_value})")
+                        print(f"Final Dealer hand: {dealer_hand} (Value: {dealer_value})")
+
+                        if player_value > dealer_value:
+                            print("Player wins!")
+                            results.append("Player wins!")
+                        elif player_value < dealer_value:
+                            print("Dealer wins!")
+                            results.append("Dealer wins!")
+                        else:
+                            print("Push - Tie game.")
+                            results.append("Push - Tie game.")
+
+                    return results
